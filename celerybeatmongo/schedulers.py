@@ -5,7 +5,6 @@
 # of the License at http://www.apache.org/licenses/LICENSE-2.0
 
 import datetime
-from celerybeatmongo.models import *
 from celery.beat import Scheduler, ScheduleEntry
 from celery.utils.log import get_logger
 from celery import current_app
