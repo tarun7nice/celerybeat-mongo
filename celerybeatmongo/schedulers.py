@@ -1,16 +1,15 @@
-# Copyright 2013 Regents of the University of Michigan 
+# Copyright 2014 Artyom Topchyan
 
 # Licensed under the Apache License, Version 2.0 (the "License"); you may not
 # use this file except in compliance with the License. You may obtain a copy
 # of the License at http://www.apache.org/licenses/LICENSE-2.0
 
-import mongoengine
 import datetime
-
 from celerybeatmongo.models import *
 from celery.beat import Scheduler, ScheduleEntry
 from celery.utils.log import get_logger
 from celery import current_app
+from pymongo import Connection
 
 class MongoScheduleEntry(ScheduleEntry):
     
@@ -18,39 +17,39 @@ class MongoScheduleEntry(ScheduleEntry):
         self._task = task
         
         self.app = current_app._get_current_object()
-        self.name = self._task.name
-        self.task = self._task.task
+        self.name = self._task["name"]
+        self.task = self._task["task"]
         
-        self.schedule = self._task.schedule
+        self.schedule = self._task["schedule"]
             
-        self.args = self._task.args
-        self.kwargs = self._task.kwargs
+        self.args = self._task["args"]
+        self.kwargs = self._task["kwargs"]
         self.options = {
-            'queue': self._task.queue,
-            'exchange': self._task.exchange,
-            'routing_key': self._task.routing_key,
-            'expires': self._task.expires
+            'queue': self._task["queue"],
+            'exchange': self._task["exchange"],
+            'routing_key': self._task["routing_key"],
+            'expires': self._task["expires"]
         }
         if self._task.total_run_count is None:
             self._task.total_run_count = 0
-        self.total_run_count = self._task.total_run_count
+        self.total_run_count = self._task["total_run_count"]
         
-        if not self._task.last_run_at:
-            self._task.last_run_at = self._default_now()
-        self.last_run_at = self._task.last_run_at
+        if not self._task["last_run_at"]:
+            self._task["last_run_at"] = self._default_now()
+        self.last_run_at = self._task["last_run_at"]
 
     def _default_now(self):
         return self.app.now()
         
     def next(self):
-        self._task.last_run_at = self.app.now()
-        self._task.total_run_count += 1
+        self._task["last_run_at"] = self.app.now()
+        self._task["total_run_count"] += 1
         return self.__class__(self._task)
         
     __next__ = next
     
     def is_due(self):
-        if not self._task.enabled:
+        if not self._task["enabled"]:
             return False, 5.0   # 5 second delay for re-enable.
         return self.schedule.is_due(self.last_run_at)
         
@@ -65,10 +64,10 @@ class MongoScheduleEntry(ScheduleEntry):
         return new_entry
 
     def save(self):
-        if self.total_run_count > self._task.total_run_count:
-            self._task.total_run_count = self.total_run_count 
-        if self.last_run_at and self._task.last_run_at and self.last_run_at > self._task.last_run_at:
-            self._task.last_run_at = self.last_run_at
+        if self.total_run_count > self._task["total_run_count"]:
+            self._task["total_run_count"] = self.total_run_count 
+        if self.last_run_at and self._task["last_run_at"] and self.last_run_at > self._task["last_run_at"]:
+            self._task["last_run_at"] = self.last_run_at
         self._task.save()
     
 
@@ -82,20 +81,28 @@ class MongoScheduler(Scheduler):
     Entry = MongoScheduleEntry
    
     def __init__(self, *args, **kwargs):
+
         if hasattr(current_app.conf, "CELERY_MONGODB_SCHEDULER_DB"):
             db = current_app.conf.CELERY_MONGODB_SCHEDULER_DB
         else:
             db = "celery"
-        if hasattr(current_app.conf, "CELERY_MONGODB_SCHEDULER_URL"):
-            self._mongo = mongoengine.connect(db, host=current_app.conf.CELERY_MONGODB_SCHEDULER_URL)
-            get_logger(__name__).info("backend scheduler using %s/%s:%s",
-                    current_app.conf.CELERY_MONGODB_SCHEDULER_URL,
-                    db, get_periodic_task_collection())
+        if hasattr(current_app.conf, "CELERY_MONGODB_SCHEDULER_COLLECTION") \
+            and current_app.conf.CELERY_MONGODB_SCHEDULER_COLLECTION:
+            collection=current_app.conf.CELERY_MONGODB_SCHEDULER_COLLECTION
         else:
-            self._mongo = mongoengine.connect(db)
-            get_logger(__name__).info("backend scheduler using %s/%s:%s",
-                    "mongodb://localhost", 
-                    db, get_periodic_task_collection())
+            collection="schedules"
+
+        if hasattr(current_app.conf, "CELERY_MONGODB_SCHEDULER_URL"):
+              
+             self.connection=Connection(current_app.conf.CELERY_MONGODB_SCHEDULER_URL) 
+             get_logger(__name__).info("backend scheduler using %s/%s:%s",
+                    current_app.conf.CELERY_MONGODB_SCHEDULER_DB,
+                    db,collection)
+        else:
+            self.connection=Connection() 
+
+
+        self.db=connection[db][collection]
   
         self._schedule = {}
         self._last_updated = None
@@ -114,10 +121,11 @@ class MongoScheduler(Scheduler):
         return self._last_updated + self.UPDATE_INTERVAL < datetime.datetime.now()
         
     def get_from_database(self):
+        
         self.sync()
         d = {}
-        for doc in PeriodicTask.objects():
-            d[doc.name] = MongoScheduleEntry(doc)
+        for doc in self.db.find():
+            d[doc["name"]] = MongoScheduleEntry(doc)
         return d
      
     @property
