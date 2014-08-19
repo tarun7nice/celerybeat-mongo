@@ -77,8 +77,6 @@ class MongoScheduleEntry(ScheduleEntry):
     __next__ = next
     
     def is_due(self):
-        
-        get_logger(__name__).info("Checking %s"%self._task["name"])
         if not self._task["enabled"]:
             return False, 5.0   # 5 second delay for re-enable.
         return self.schedule.is_due(self.last_run_at)
@@ -98,8 +96,30 @@ class MongoScheduleEntry(ScheduleEntry):
             self._task["total_run_count"] = self.total_run_count 
         if self.last_run_at and self._task["last_run_at"] and self.last_run_at > self._task["last_run_at"]:
             self._task["last_run_at"] = self.last_run_at
-        
-        self.db.update({"_id":self._task["_id"]},self._task)
+       
+        #if "crontab" in  self._task:
+        #         self.db.update({"_id":self._task["_id"]},{"$set":{   "total_run_count":self._task["total_run_count"],"last_run_at":self._task["last_run_at"] ,
+        #              "queue":self._task["queue"],
+        #              "exchange":self._task["exchange"],
+        #              "routing_key":self._task["routing_key"],
+        #              "expires":self._task["expires"],
+        #              "args":self._task["args"],
+        #              "kwargs":self._task["kwargs"],
+        #               "crontab":self._task["crontab"],
+                                                          
+        #                                                  }})
+        #if "interval" in  self._task:
+        #    self.db.update({"_id":self._task["_id"]},{"$set":{   "total_run_count":self._task["total_run_count"],"last_run_at":self._task["last_run_at"] ,
+        #              "queue":self._task["queue"],
+        #              "exchange":self._task["exchange"],
+        #              "routing_key":self._task["routing_key"],
+        #              "expires":self._task["expires"],
+        #              "args":self._task["args"],
+        #              "kwargs":self._task["kwargs"],
+        #               "interval":self._task["interval"],
+                                                          
+        #                                                  }})
+        self.db.update({"_id":self._task["_id"]},{"$set":{   "total_run_count":self._task["total_run_count"],"last_run_at":self._task["last_run_at"] }})
     
 
 class MongoScheduler(Scheduler):
@@ -107,7 +127,7 @@ class MongoScheduler(Scheduler):
     
     # how often should we sync in schedule information
     # from the backend mongo database
-    UPDATE_INTERVAL = datetime.timedelta(seconds=60)
+    UPDATE_INTERVAL = datetime.timedelta(seconds=5)
     
     Entry = MongoScheduleEntry
    
@@ -152,7 +172,7 @@ class MongoScheduler(Scheduler):
         return self._last_updated + self.UPDATE_INTERVAL < datetime.datetime.now()
         
     def get_from_database(self):
-        get_logger(__name__).info("Checking Schedules")
+        #get_logger(__name__).info("Checking Schedules")
         self.sync()
         d = {}
         for doc in self.db.find():
