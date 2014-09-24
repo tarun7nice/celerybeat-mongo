@@ -1,4 +1,4 @@
-# Copyright 2014 Artyom Topchyan
+# Copyright 2014 Tarun Gupta
 
 # Licensed under the Apache License, Version 2.0 (the "License"); you may not
 # use this file except in compliance with the License. You may obtain a copy
@@ -8,7 +8,7 @@ import datetime
 from celery.beat import Scheduler, ScheduleEntry
 from celery.utils.log import get_logger
 from celery import current_app
-from pymongo import Connection
+from pymongo import MongoClient
 import celery.schedules
 import pdb
 
@@ -96,29 +96,7 @@ class MongoScheduleEntry(ScheduleEntry):
             self._task["total_run_count"] = self.total_run_count 
         if self.last_run_at and self._task["last_run_at"] and self.last_run_at > self._task["last_run_at"]:
             self._task["last_run_at"] = self.last_run_at
-       
-        #if "crontab" in  self._task:
-        #         self.db.update({"_id":self._task["_id"]},{"$set":{   "total_run_count":self._task["total_run_count"],"last_run_at":self._task["last_run_at"] ,
-        #              "queue":self._task["queue"],
-        #              "exchange":self._task["exchange"],
-        #              "routing_key":self._task["routing_key"],
-        #              "expires":self._task["expires"],
-        #              "args":self._task["args"],
-        #              "kwargs":self._task["kwargs"],
-        #               "crontab":self._task["crontab"],
-                                                          
-        #                                                  }})
-        #if "interval" in  self._task:
-        #    self.db.update({"_id":self._task["_id"]},{"$set":{   "total_run_count":self._task["total_run_count"],"last_run_at":self._task["last_run_at"] ,
-        #              "queue":self._task["queue"],
-        #              "exchange":self._task["exchange"],
-        #              "routing_key":self._task["routing_key"],
-        #              "expires":self._task["expires"],
-        #              "args":self._task["args"],
-        #              "kwargs":self._task["kwargs"],
-        #               "interval":self._task["interval"],
-                                                          
-        #                                                  }})
+                                                 }})
         self.db.update({"_id":self._task["_id"]},{"$set":{   "total_run_count":self._task["total_run_count"],"last_run_at":self._task["last_run_at"] }})
     
 
@@ -145,15 +123,15 @@ class MongoScheduler(Scheduler):
 
         if hasattr(current_app.conf, "CELERY_MONGODB_SCHEDULER_URL"):
               
-             connection=Connection(current_app.conf.CELERY_MONGODB_SCHEDULER_URL) 
+             client=MongoClient(current_app.conf.CELERY_MONGODB_SCHEDULER_URL) 
              get_logger(__name__).info("backend scheduler using %s/%s:%s",
                     current_app.conf.CELERY_MONGODB_SCHEDULER_DB,
                     db,collection)
         else:
-            connection=Connection() 
+            client=MongoClient() 
 
 
-        self.db=connection[db][collection]
+        self.db=client[db][collection]
   
         self._schedule = {}
         self._last_updated = None
